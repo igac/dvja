@@ -1,0 +1,165 @@
+name: SBOM generation, SCA and SAST Snyk
+
+on:
+  workflow_dispatch:
+
+jobs:
+  security-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
+      - name: Build Maven project
+        run: mvn -B clean package -DskipTests
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: dvja-sbom
+          output-file: dvja-sbom.json
+
+      - name: Scan SBOM with Grype (readable table)
+        uses: anchore/scan-action@v7
+        with:
+          sbom: dvja-sbom.json
+          output-format: table
+          output-file: grype-results.txt
+          fail-build: false
+          severity-cutoff: high
+
+      - name: Add Grype report to job summary
+        shell: bash
+        run: |
+          echo "## Grype vulnerability summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Open vulnerability table</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat grype-results.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Scan SBOM with Grype (SARIF)
+        uses: anchore/scan-action@v7
+        with:
+          sbom: dvja-sbom.json
+          output-format: sarif
+          output-file: grype-results.sarif
+          fail-build: false
+          severity-cutoff: high
+
+      - name: Upload Grype SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: grype-results.sarif
+          category: grype-sbom
+
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
+
+      - name: Run Snyk Code (human-readable + JSON)
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk code test \
+            --severity-threshold=high \
+            --json-file-output=snyk-code.json
+
+      - name: Add Snyk Code summary to job summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Snyk Code summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ ! -f snyk-code.json ]; then
+            echo "No Snyk Code JSON report was generated." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "Human-readable SAST findings from Snyk Code." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          python3 - <<'PY'
+          import json
+          from collections import Counter
+
+          with open("snyk-code.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          runs = data if isinstance(data, list) else [data]
+          results = []
+          for run in runs:
+              results.extend(run.get("runs", [{}])[0].get("results", []))
+
+          levels = Counter()
+          for r in results:
+              level = r.get("level", "unknown")
+              levels[level] += 1
+
+          with open("/tmp/snyk-summary.md", "w", encoding="utf-8") as out:
+              total = len(results)
+              out.write(f"Total findings: **{total}**\n\n")
+              if total:
+                  out.write(f"- Error: **{levels.get('error', 0)}**\n")
+                  out.write(f"- Warning: **{levels.get('warning', 0)}**\n")
+                  out.write(f"- Note: **{levels.get('note', 0)}**\n\n")
+                  out.write("| Severity | Rule | File |\n")
+                  out.write("|---|---|---|\n")
+                  for r in results[:20]:
+                      rule = r.get("ruleId", "unknown")
+                      level = r.get("level", "unknown")
+                      locs = r.get("locations", [])
+                      file_path = "unknown"
+                      if locs:
+                          file_path = locs[0].get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "unknown")
+                      out.write(f"| {level} | `{rule}` | `{file_path}` |\n")
+              else:
+                  out.write("No findings reported by Snyk Code.\n")
+          PY
+
+          cat /tmp/snyk-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run Snyk Code (SARIF)
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk code test \
+            --severity-threshold=high \
+            --sarif-file-output=snyk-code.sarif
+
+      - name: Upload Snyk Code SARIF to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            dvja-sbom.json
+            grype-results.txt
+            grype-results.sarif
+            snyk-code.json
+            snyk-code.sarif
