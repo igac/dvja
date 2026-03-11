@@ -75,7 +75,7 @@ jobs:
       - name: Run Snyk Code (human-readable + JSON)
         continue-on-error: true
         env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_TOKEN: ${{ cab3412d-7db7-4cd3-9a79-c009d716aded }}
         run: |
           snyk code test \
             --severity-threshold=high \
@@ -139,7 +139,7 @@ jobs:
       - name: Run Snyk Code (SARIF)
         continue-on-error: true
         env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_TOKEN: ${{ cab3412d-7db7-4cd3-9a79-c009d716aded }}
         run: |
           snyk code test \
             --severity-threshold=high \
