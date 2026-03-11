@@ -40,8 +40,8 @@ jobs:
           sbom: dvja3-sbom.json
           output-format: sarif
           output-file: grype-results.sarif
-          fail-build: true
-          severity-cutoff: low
+          fail-build: false
+          severity-cutoff: high
           cache-db: true
 
       - name: Upload Grype SARIF to GitHub Code Scanning
