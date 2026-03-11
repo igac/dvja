@@ -1,0 +1,91 @@
+name: SBOM generation and SCA - Task5 with detail
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-sbom-and-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
+      - name: Build Maven project
+        run: mvn -B clean package -DskipTests
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: dvja3-sbom
+          output-file: dvja3-sbom.json
+
+      - name: Scan SBOM with Grype (readable table)
+        uses: anchore/scan-action@v7
+        with:
+          sbom: dvja3-sbom.json
+          output-format: table
+          output-file: grype-results.txt
+          fail-build: false
+        #  severity-cutoff: high
+
+      - name: Add Grype report to job summary
+        shell: bash
+        run: |
+          echo "## Grype vulnerability summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Human-readable scan results generated from \`dvja-sbom.json\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Open vulnerability table</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat grype-results.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Scan SBOM with Grype (SARIF)
+        uses: anchore/scan-action@v7
+        with:
+          sbom: dvja3-sbom.json
+          output-format: sarif
+          output-file: grype-results.sarif
+          fail-build: false
+          severity-cutoff: high
+
+      - name: Upload Grype SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: grype-results.sarif
+          category: grype-sbom
+
+      - name: Scan SBOM with Grype (JSON)
+        uses: anchore/scan-action@v7
+        with:
+          sbom: dvja3-sbom.json
+          output-format: json
+          output-file: grype-results.json
+          fail-build: false
+          severity-cutoff: high
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            dvja3-sbom.json
+            grype-results.txt
+            grype-results.json
+            grype-results.sarif
