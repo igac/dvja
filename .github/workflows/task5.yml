@@ -30,14 +30,14 @@ jobs:
         with:
           path: .
           format: cyclonedx-json
-          artifact-name: dvja-sbom
-          output-file: dvja-sbom.json
+          artifact-name: dvja3-sbom
+          output-file: dvja3-sbom.json
 
       - name: Scan SBOM with Grype (SARIF)
         uses: anchore/scan-action@v6
         id: grype-sarif
         with:
-          sbom: dvja-sbom.json
+          sbom: dvja3-sbom.json
           output-format: sarif
           output-file: grype-results.sarif
           fail-build: true
@@ -54,7 +54,7 @@ jobs:
         uses: anchore/scan-action@v6
         id: grype-json
         with:
-          sbom: dvja-sbom.json
+          sbom: dvja3-sbom.json
           output-format: json
           output-file: grype-results.json
           fail-build: false
