@@ -41,7 +41,7 @@ jobs:
           output-format: sarif
           output-file: grype-results.sarif
           fail-build: true
-          severity-cutoff: high
+          severity-cutoff: low
           cache-db: true
 
       - name: Upload Grype SARIF to GitHub Code Scanning
