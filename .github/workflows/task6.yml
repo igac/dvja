@@ -1,10 +1,10 @@
-name: SBOM generation SCA and SAST-Snyk
+name: SAST analysis with Snyk
 
 on:
   workflow_dispatch:
 
 jobs:
-  security-analysis:
+  sast-analysis:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,57 +25,13 @@ jobs:
       - name: Build Maven project
         run: mvn -B clean package -DskipTests
 
-      - name: Generate SBOM with Syft
-        uses: anchore/sbom-action@v0
-        with:
-          path: .
-          format: cyclonedx-json
-          artifact-name: dvja-sbom
-          output-file: dvja-sbom.json
-
-      - name: Scan SBOM with Grype (readable table)
-        uses: anchore/scan-action@v7
-        with:
-          sbom: dvja-sbom.json
-          output-format: table
-          output-file: grype-results.txt
-          fail-build: false
-          severity-cutoff: high
-
-      - name: Add Grype report to job summary
-        shell: bash
-        run: |
-          echo "## Grype vulnerability summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "<details><summary>Open vulnerability table</summary>" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '```text' >> "$GITHUB_STEP_SUMMARY"
-          cat grype-results.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Scan SBOM with Grype (SARIF)
-        uses: anchore/scan-action@v7
-        with:
-          sbom: dvja-sbom.json
-          output-format: sarif
-          output-file: grype-results.sarif
-          fail-build: false
-          severity-cutoff: high
-
-      - name: Upload Grype SARIF to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: grype-results.sarif
-          category: grype-sbom
-
       - name: Install Snyk CLI
         uses: snyk/actions/setup@master
 
       - name: Run Snyk Code (human-readable + JSON)
         continue-on-error: true
         env:
-          SNYK_TOKEN: ${{ cab3412d-7db7-4cd3-9a79-c009d716aded }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           snyk code test \
             --severity-threshold=high \
@@ -139,7 +95,7 @@ jobs:
       - name: Run Snyk Code (SARIF)
         continue-on-error: true
         env:
-          SNYK_TOKEN: ${{ cab3412d-7db7-4cd3-9a79-c009d716aded }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           snyk code test \
             --severity-threshold=high \
@@ -152,14 +108,11 @@ jobs:
           sarif_file: snyk-code.sarif
           category: snyk-code
 
-      - name: Upload reports
+      - name: Upload Snyk reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-reports
+          name: snyk-reports
           path: |
-            dvja-sbom.json
-            grype-results.txt
-            grype-results.sarif
             snyk-code.json
             snyk-code.sarif
