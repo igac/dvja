@@ -1,7 +1,6 @@
 name: SBOM generation
-on: 
-  worflow_dispatch
-  jobs: 
+on: worflow_dispatch
+jobs: 
     create-sbom:
       runs-on: ubuntu-latest
       steps:
@@ -19,4 +18,9 @@ on:
           run: curl -sSfL https://get.anchore.io/syft | sudo sh -s -- -b /usr/local/bin
         - name: Building SBOM
         run: syft dir:. -o cyclonedx-json > dvdja-sbom.json
-         
+        - name: Upload SBOM
+          uses: actions/upload-artifact@v7.0.0
+          with:
+            name: sbom-report
+            path: dvja-sbom.json
+            
