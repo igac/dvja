@@ -1,4 +1,4 @@
-name: SBOM generation, SCA and SAST Snyk
+name: SBOM generation, SCA and SAST-Snyk
 
 on:
   workflow_dispatch:
