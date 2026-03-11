@@ -1,7 +1,7 @@
 name: SBOM generation
-on:
+on: 
   worflow_dispatch
-  jobs:
+  jobs: 
     create-sbom:
       runs-on: ubuntu-latest
       steps:
