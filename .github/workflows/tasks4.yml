@@ -1,4 +1,4 @@
-name: SBOM generation
+name: SBOM generation - task4
 
 on:
   workflow_dispatch:
