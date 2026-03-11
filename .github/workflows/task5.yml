@@ -1,0 +1,67 @@
+name: SBOM generation and SCA - Task5
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-sbom-and-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
+      - name: Build Maven project
+        run: mvn -B clean package -DskipTests
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: dvja-sbom
+          output-file: dvja-sbom.json
+
+      - name: Scan SBOM with Grype (SARIF)
+        uses: anchore/scan-action@v6
+        id: grype-sarif
+        with:
+          sbom: dvja-sbom.json
+          output-format: sarif
+          output-file: grype-results.sarif
+          fail-build: true
+          severity-cutoff: high
+          cache-db: true
+
+      - name: Upload Grype SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: grype-results.sarif
+          category: grype-sbom
+
+      - name: Scan SBOM with Grype (JSON artifact)
+        uses: anchore/scan-action@v6
+        id: grype-json
+        with:
+          sbom: dvja-sbom.json
+          output-format: json
+          output-file: grype-results.json
+          fail-build: false
+          cache-db: true
+
+      - name: Upload Grype JSON report
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-report
+          path: grype-results.json
